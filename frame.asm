@@ -1,5 +1,6 @@
 .model tiny
 .code
+.186
 org 100h
 
 Start:
@@ -272,59 +273,136 @@ SkipSpace endp
 ;------------------------------------------------
 ; atoi
 ; Entry: si - address of buffer
-; Exit: al - number,
+; Exit: cx - number
 ;       si - new position
-; Destr:
+; Destr: None
 ;------------------------------------------------
-Atoi proc ; TODO: неправильно, не домножаю на 10...
+Atoi proc
+    push bx
+    push cx
+    push dx
 
-    mov bl, 0h
+    mov dl, 10 ; multiple coeff
+    xor ax, ax ; ax = 0
+    xor bx, bx ; bx = 0
     call SkipSpace
 
 next_digit:
     lodsb ; load byte from ds:si in al and inc si
     cmp al, '0'
-    jb not_digit
+    jb calculate ; if not digit
     cmp al, '9'
-    ja not_digit
+    ja calculate ; if not digit
 
     sub al, 30h ; al = digit
-    add bl, al  ; update storage bx
+    push ax ; store digit
+    inc bl  ; bl = updated number of digits
     jmp next_digit
 
-not_digit:
-    mov al, bl
+calculate:
+    dec si ; si = address after last digit
 
+    cmp bl, bh
+    ja counting ; bh - digit number < bl - number of digits
+    jmp exit
+
+    counting:
+        pop ax ; pop next digit
+        push bx ; store bh
+        cmp bh, 0h
+        ja mult
+        jmp update_number
+
+        mult:
+            mul dl ; dl - multiplier
+            dec bh
+            cmp bh, 0h
+            ja mult
+
+    update_number:
+        pop bx
+        inc bh ; bh - next digit number
+        add cx, ax ; cx - counter
+        cmp bl, bh
+        ja counting
+
+exit:
+    pop dx
+    pop cx
+    pop bx
     ret
 Atoi endp
 ;------------------------------------------------
 
 ;------------------------------------------------
-; a to hex
+; atohex
 ; Entry: si - address of buffer
-; Exit: al - number,
+; Exit: cx - number
 ;       si - new position
 ; Destr:
 ;------------------------------------------------
 Atohex proc
+    push bx
+    push cx
+    push dx
 
-    mov bl, 0h
+    mov dl, 10 ; multiple coeff
+    xor ax, ax ; ax = 0
+    xor bx, bx ; bx = 0
     call SkipSpace
 
-next_hex_digit:
+next_digit:
     lodsb ; load byte from ds:si in al and inc si
     cmp al, '0'
-    jb not_hex_digit
+    jb check_hex ; if not digit
     cmp al, '9'
-    ja not_hex_digit
+    ja check_hex ; if not digit
 
+    jmp is_number
+
+check_hex:
+    cmp al, 'a'
+    jb calculate ; byte is not hex
+    cmp al, 'f'
+    ja calculate ; byte is not hex
+
+is_number:
     sub al, 30h ; al = digit
-    add bl, al  ; update storage bx
-    jmp next_hex_digit
+    push ax ; store digit
+    inc bl  ; bl = updated number of digits
+    jmp next_digit
 
-not_hex_digit:
-    mov al, bl
+calculate:
+    dec si ; si = address after last digit
 
+    cmp bl, bh
+    ja counting ; bh - digit number < bl - number of digits
+    jmp exit
+
+    counting:
+        pop ax ; pop next digit
+        push bx ; store bh
+        cmp bh, 0h
+        ja mult
+        jmp update_number
+
+        mult:
+            shl ax, 4 ; ax *= 16
+            dec bh
+            cmp bh, 0h
+            ja mult
+
+    update_number:
+        pop bx
+        inc bh ; bh - next digit number
+        add cx, ax ; cx - counter
+        cmp bl, bh
+        ja counting
+
+exit:
+    pop dx
+    pop cx
+    pop bx
     ret
 Atohex endp
 ;------------------------------------------------
