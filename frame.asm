@@ -486,9 +486,12 @@ parse_message:
 ParseCmdLine endp
 ;------------------------------------------------
 
-FrameStyleTable: db 0dah, 0c4h, 0bfh, 0b3h, ' ', 0b3h, 0c0h, 0c4h, 0d9h
-                 db 0c9h, 0cdh, 0bbh, 0bah, ' ', 0bah, 0c8h, 0cdh, 0bch
-                 db 03h,  03h,  03h,  03h,  03h, 03h,  03h,  03h,  03h
-                 db 0feh, 0feh, 0feh, 0feh, 2eh, 0feh, 0feh, 0feh, 0feh
-Message: db 'HUI$'
+FrameStyleTable: db 0dah, 0c4h, 0bfh, 0b3h, ' ',  0b3h, 0c0h, 0c4h, 0d9h ; 1 style
+                 db 0c9h, 0cdh, 0bbh, 0bah, ' ',  0bah, 0c8h, 0cdh, 0bch ; 2 style
+                 db 03h,  03h,  03h,  03h,  2eh,  03h,  03h,  03h,  03h  ; 3 style
+                 db 0feh, 0feh, 0feh, 0feh, 2eh,  0feh, 0feh, 0feh, 0feh ; 4 style
+                 db 0fh,  0fh,  0fh,  2ah,  2eh,  2ah,  0fh,  0fh,  0fh  ; 5 style
+                 db 6h,   6h,   6h,   6h,   ' ',  6h,   6h,   6h,   6h   ; 6 style
+                 db 2eh,  2eh,  2eh,  2eh,  9h,   2eh,  2eh,  2eh,  2eh  ; 7 style
+                 db 5h,   4h,   5h,   4h,   0f9h, 4h,   5h,   4h,   5h   ; 8 style
 end Start
