@@ -1,19 +1,157 @@
 .model tiny
 .code
+locals @@
 .186
 org 100h
+
+RelativeFramePosition equ 0h
+TerminateFuncCode     equ 4c00h
+DOSServices           equ 21h
 
 Start:
     mov si, offset FrameStyleTable
     call ParseCmdLine
-    xor di, di ; di = 0h <=> relative address of top left corner
+    mov di, RelativeFramePosition ; di = 0h <=> relative address of top left corner
     push es
     pop ss ; ss - PSP segment
     call DrawFrame
 
-    mov ax, 4c00h
-    int 21h
+    mov ax, TerminateFuncCode
+    int DOSServices
 
+;------------------------------------------------
+; Draw frame
+; Entry: ah - color attr (пока не работает)
+;        di - address from (relative)
+;        ds:si - address of symbols
+;        ss:bp - address of message
+;        cx - width
+;        dx - height
+;
+; Exit: None
+;------------------------------------------------
+DrawFrame proc
+    push di
+    push si
+    push cx
+    push dx
+    push ax
+
+    VideoSeg equ 0b800h
+    push bp
+    mov bp, VideoSeg
+    mov es, bp
+    call DrawLine
+    pop bp
+
+    push ax
+    mov ax, dx ; ax - height
+
+    mov bl, 2h
+    div bl
+    inc al ; al = height / 2 + 1 (for centering)
+
+    mov bl, al ; bl = al
+    pop ax ; ah - color attr
+
+    lea si, 3[si] ; si = address of 3 middle symbols
+@@next_line:
+    add di, 0a0h ; di = address of next line
+    cmp dx, bx
+    je @@draw_message
+
+    call DrawLine
+    jmp @@not_message
+
+@@draw_message:
+    call DrawMessageLine ; draw message in center
+
+@@not_message:
+    dec dx
+    cmp dx, 0h
+    jne @@next_line
+
+    lea si, 3[si] ; si = address of 3 last symbols
+    add di, 0a0h ; di = address of next line
+    call DrawLine
+
+    pop ax
+    pop dx
+    pop cx
+    pop si
+    pop di
+    ret
+DrawFrame endp
+;------------------------------------------------
+
+;------------------------------------------------
+; Parse command line
+; Entry: si - address of FrameStyleTable
+; Exit: cx - width
+;       dx - height
+;       ah - color
+;       es:bp - address of message
+;       ds:si - address of frame style
+; Destr: None
+;------------------------------------------------
+ParseCmdLine proc
+    push bx
+    push di
+
+    GetCurrentPSPFuncCode equ 51h
+    StyleLength           equ 9h
+    CommandLineOffset     equ 81h
+
+    mov ah, GetCurrentPSPFuncCode
+    int DOSServices ; getting address of PSP segment in bx
+    mov es, bx ; es - PSP segment address
+
+    xor ax, ax ; ax = 0
+    mov di, CommandLineOffset ; address of command line
+
+    call Atoi ; get width
+    mov cx, ax ; width in cx
+
+    call Atoi ; get height
+    mov dx, ax ; height in dx
+
+    call Atohex ; get color
+    mov bh, al ; save color attr in bh
+
+    call Atoi ; get style number
+
+    call SkipSpace ; es:di - address of
+                   ; frame style (if style = 0) or message
+
+    cmp al, 0h ; al = style number
+    je @@parse_style
+    jmp @@count_style_address
+
+@@parse_style:
+    mov si, di ; si - address of symbols
+    add di, StyleLength ; di - address after style symbols (... )
+               ;                                di -> ^
+    call SkipSpace
+    jmp @@parse_message
+
+
+@@count_style_address:
+    mov ah, 0h ; ax - style number
+    dec al ; ax - style number -= 1
+    mov bl, StyleLength
+    mul bl ; ax - style offset
+    add ax, si ; ax - address of FrameStyle
+    mov si, ax ; si - address of style symbols
+
+@@parse_message:
+    mov bp, di ; bp - message address
+    mov ah, bh ; ah - color attr
+
+    pop di
+    pop bx
+    ret
+ParseCmdLine endp
+;------------------------------------------------
 
 ;------------------------------------------------
 ; Draw line in video mem
@@ -62,16 +200,16 @@ DrawSymbol proc
     push bx
 
     cmp bl, 0h
-    je go_out
+    je @@out
 
-again:
+@@again:
     mov al, [si]
     stosw
     dec bl
     cmp bl, 0h
-    jne again
+    jne @@again
 
-go_out:
+@@out:
     pop bx
     pop ax
     ret
@@ -92,19 +230,21 @@ DrawMessage proc
     push cx
     push si
 
-    cmp ch, 0h
-    je return
+    BytesOnSymbol equ 2h
 
-one_more:
+    cmp ch, 0h
+    je @@out
+
+@@again:
     mov al, ss:[bp]
     inc bp
     mov es:[di], ax
-    add di, 2h
+    add di, BytesOnSymbol
     dec ch
     cmp ch, 0h
-    jne one_more
+    jne @@again
 
-return:
+@@out:
     pop si
     pop cx
     pop ax
@@ -175,82 +315,19 @@ DrawMessageLine endp
 GetMessageLength proc
     push bp
 
-    mov ch, 0
-next_char:
+    mov ch, 0h
+@@next:
     cmp byte ptr [bp], '$'
-    je quit
+    je @@out
     inc bp
     inc ch
-    jmp next_char
+    jmp @@next
 
-quit:
+@@out:
     pop bp
     ret
 GetMessageLength endp
 
-;------------------------------------------------
-; Draw frame
-; Entry: ah - color attr (пока не работает)
-;        di - address from (relative)
-;        ds:si - address of symbols
-;        ss:bp - address of message
-;        cx - width
-;        dx - height
-;
-; Exit: None
-;------------------------------------------------
-DrawFrame proc
-    push di
-    push si
-    push cx
-    push dx
-    push ax
-
-    push bp
-    mov bp, 0b800h
-    mov es, bp
-    call DrawLine
-    pop bp
-
-    push ax
-    mov ax, dx ; ax - height
-
-    mov bl, 2h
-    div bl
-    inc al ; al = height / 2 + 1 (for centering)
-
-    mov bl, al ; bl = al
-    pop ax ; ah - color attr
-
-    lea si, 3[si] ; si = address of 3 middle symbols
-next_symbol:
-    add di, 0a0h ; di = address of next line
-    cmp dx, bx
-    je draw_message
-
-    call DrawLine
-    jmp not_message
-
-draw_message:
-    call DrawMessageLine ; draw message in center
-
-not_message:
-    dec dx
-    cmp dx, 0h
-    jne next_symbol
-
-    lea si, 3[si] ; si = address of 3 last symbols
-    add di, 0a0h ; di = address of next line
-    call DrawLine
-
-    pop ax
-    pop dx
-    pop cx
-    pop si
-    pop di
-    ret
-DrawFrame endp
-;------------------------------------------------
 
 ;------------------------------------------------
 ; Skip space
@@ -294,46 +371,46 @@ Atoi proc
     xor cx, cx ; cx = 0
     call SkipSpace
 
-next_digit_dec:
+@@next_digit:
     mov al, es:[di] ; al - next symbol
     cmp al, '0'
-    jb calculate_dec ; if not digit
+    jb @@calculate ; if not digit
     cmp al, '9'
-    ja calculate_dec ; if not digit
+    ja @@calculate ; if not digit
 
     inc di
-    sub al, 30h ; al = digit value
+    sub al, '0' ; al = digit value
     push ax ; store digit
     inc bl  ; bl = updated number of digits
-    jmp next_digit_dec
+    jmp @@next_digit
 
-calculate_dec:
+@@calculate:
     cmp bl, bh ; bh - digit number (from right to left)
-    ja counting_dec ; bh - digit number < bl - number of digits
-    jmp exit_dec
+    ja @@counting ; bh - digit number < bl - number of digits
+    jmp @@out
 
-    counting_dec:
+    @@counting:
         pop ax ; pop next digit
         push bx ; store bh
         cmp bh, 0h
-        ja mult_dec
-        jmp update_number_dec
+        ja @@mult
+        jmp @@update_number
 
-        mult_dec:
+        @@mult:
             mul dl ; dl - multiplier
             ; result in ax, but think that number < 255
             dec bh
             cmp bh, 0h
-            ja mult_dec
+            ja @@mult
 
-    update_number_dec:
+    @@update_number:
         pop bx
         inc bh ; bh - next digit number
         add cl, al ; cl - counter
         cmp bl, bh
-        ja counting_dec
+        ja @@counting
 
-exit_dec:
+@@out:
     mov al, cl ; return value
 
     pop dx
@@ -348,71 +425,74 @@ Atoi endp
 ; Entry: es:di - address of buffer
 ; Exit: al - number
 ;       di - new position
-; Destr:
+; Destr: None
 ;------------------------------------------------
 Atohex proc
     push bx
     push cx
+
+    ShiftCoeff equ 4h
 
     xor ax, ax ; ax = 0
     xor bx, bx ; bx = 0
     xor cx, cx ; cx = 0
     call SkipSpace
 
-next_digit_hex:
+@@next_digit:
     mov al, es:[di] ; al - next symbol
     cmp al, '0'
-    jb check_hex ; if not digit
+    jb @@check_hex ; if not digit
     cmp al, '9'
-    ja check_hex ; if not digit
+    ja @@check_hex ; if not digit
 
-    jmp is_decimal_digit
+    jmp @@is_decimal_digit
 
-check_hex:
+@@check_hex:
     cmp al, 'a'
-    jb calculate_hex ; byte is not hex
+    jb @@calculate ; byte is not hex
     cmp al, 'f'
-    ja calculate_hex ; byte is not hex
+    ja @@calculate ; byte is not hex
 
     sub al, 'a' - 0ah ; al = hex symbol value
-    jmp is_number
+                      ; 0ah = value of 'a' digit
+    jmp @@is_valid_digit
 
-is_decimal_digit:
-    sub al, 30h ; al = digit value
+@@is_decimal_digit:
+    sub al, '0' ; al = digit value
 
-is_number:
+@@is_valid_digit:
     inc di ; es:di - address of next symbol
     push ax ; store digit
     inc bl  ; bl = updated number of digits
-    jmp next_digit_hex
+    jmp @@next_digit
 
-calculate_hex:
+@@calculate:
 
     cmp bl, bh ; bh - digit number
-    ja counting_hex ; bh - digit number < bl - number of digits
-    jmp exit_hex
+    ja @@counting ; bh - digit number < bl - number of digits
+    jmp @@out
 
-    counting_hex:
+    @@counting:
         pop ax ; pop next digit
         push bx ; store bh
         cmp bh, 0h
-        ja mult_hex
-        jmp update_number_hex
+        ja @@mult
+        jmp @@update_number
 
-        mult_hex:
-            shl al, 4 ; al *= 16
+        @@mult:
+            shl al, ShiftCoeff ; al *= 16
             dec bh
             cmp bh, 0h
-            ja mult_hex
+            ja @@mult
 
-    update_number_hex:
+    @@update_number:
         pop bx
         inc bh ; bh - next digit number
         add cl, al ; cl - counter
         cmp bl, bh
-        ja counting_hex
+        ja @@counting
 
-exit_hex:
+@@out:
     mov al, cl ; return value
 
     pop cx
@@ -421,70 +501,6 @@ exit_hex:
 Atohex endp
 ;------------------------------------------------
 
-;------------------------------------------------
-; Parse command line
-; Entry: si - address of FrameStyleTable
-; Exit: cx - width
-;       dx - height
-;       ah - color
-;       es:bp - address of message
-;       ds:si - address of frame style
-; Destr: None
-;------------------------------------------------
-ParseCmdLine proc
-    push bx
-    push di
-
-    mov ah, 51h
-    int 21h ; getting address of PSP segment in bx
-    mov es, bx ; es - PSP segment address
-
-    xor ax, ax ; ax = 0
-    mov di, 81h ; address of command line
-
-    call Atoi ; get width
-    mov cx, ax ; width in cx
-
-    call Atoi ; get height
-    mov dx, ax ; height in dx
-
-    call Atohex ; get color
-    mov bh, al ; save color attr in bh
-
-    call Atoi ; get style number
-
-    call SkipSpace ; es:di - address of
-                   ; frame style (if style = 0) or message
-
-    cmp al, 0h ; al = style number
-    je parse_style
-    jmp count_style_address
-
-parse_style:
-    mov si, di ; si - address of symbols
-    add di, 9h ; di - address after style symbols (... )
-               ;                                di -> ^
-    call SkipSpace
-    jmp parse_message
-
-
-count_style_address:
-    mov ah, 0h ; ax - style number
-    dec al ; ax - style number -= 1
-    mov bl, 9h
-    mul bl ; ax - style offset
-    add ax, si ; ax - address of FrameStyle
-    mov si, ax ; si - address of style symbols
-
-parse_message:
-    mov bp, di ; bp - message address
-    mov ah, bh ; ah - color attr
-
-    pop di
-    pop bx
-    ret
-ParseCmdLine endp
-;------------------------------------------------
 
 FrameStyleTable: db 0dah, 0c4h, 0bfh, 0b3h, ' ',  0b3h, 0c0h, 0c4h, 0d9h ; 1 style
                  db 0c9h, 0cdh, 0bbh, 0bah, ' ',  0bah, 0c8h, 0cdh, 0bch ; 2 style
