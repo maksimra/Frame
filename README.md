@@ -42,7 +42,7 @@ frame.com 10 6 4e 0 /-\-.-\-/ HELLO$
 
 This will create a frame of 10x17 size, with '4e' color, custom style "/-\-.-\-/" and message "HELLO" in the senter of frame:
 
-![example_1](img\frame1.jpg)
+![example_1](img/frame1.jpg)
 
 ```
 frame.com 40 10 0a 5 Hello, World!$
@@ -50,7 +50,7 @@ frame.com 40 10 0a 5 Hello, World!$
 
 This will create a frame of 40x10 size, with green color '0A', using style 7, and displaying "Hello, World!":
 
-![example_1](img\frame2.jpg)
+![example_1](img/frame2.jpg)
 
 ## Implementation Details
 
