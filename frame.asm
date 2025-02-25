@@ -11,9 +11,9 @@ DOSServices           equ 21h
 Start:
     mov si, offset FrameStyleTable
     call ParseCmdLine
+    push di ; di - message offset
+    push es ; es - message segment (PSP segment)
     mov di, RelativeFramePosition ; di = 0h <=> relative address of top left corner
-    push es
-    pop ss ; ss - PSP segment
     call DrawFrame
 
     mov ax, TerminateFuncCode
@@ -24,13 +24,17 @@ Start:
 ; Entry: ah - color attr (пока не работает)
 ;        di - address from (relative)
 ;        ds:si - address of symbols
-;        ss:bp - address of message
+;        [bp + 4] - message segment
+;        [bp + 6] - message offset
 ;        cx - width
 ;        dx - height
 ;
 ; Exit: None
 ;------------------------------------------------
 DrawFrame proc
+    push bp
+    mov bp, sp
+
     push di
     push si
     push cx
@@ -38,11 +42,9 @@ DrawFrame proc
     push ax
 
     VideoSeg equ 0b800h
-    push bp
-    mov bp, VideoSeg
-    mov es, bp
+    push VideoSeg
+    pop es
     call DrawLine
-    pop bp
 
     push ax
     mov ax, dx ; ax - height
@@ -90,13 +92,12 @@ DrawFrame endp
 ; Exit: cx - width
 ;       dx - height
 ;       ah - color
-;       es:bp - address of message
+;       es:di - address of message
 ;       ds:si - address of frame style
 ; Destr: None
 ;------------------------------------------------
 ParseCmdLine proc
     push bx
-    push di
 
     GetCurrentPSPFuncCode equ 51h
     StyleLength           equ 9h
@@ -144,10 +145,8 @@ ParseCmdLine proc
     mov si, ax ; si - address of style symbols
 
 @@parse_message:
-    mov bp, di ; bp - message address
     mov ah, bh ; ah - color attr
 
-    pop di
     pop bx
     ret
 ParseCmdLine endp
