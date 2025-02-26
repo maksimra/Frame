@@ -66,6 +66,8 @@ DrawFrame proc
     jmp @@not_message
 
 @@draw_message:
+    push [bp + 6] ; message offset
+    push [bp + 4] ; message segment
     call DrawMessageLine ; draw message in center
 
 @@not_message:
@@ -82,7 +84,9 @@ DrawFrame proc
     pop cx
     pop si
     pop di
-    ret
+
+    pop bp
+    ret 4h ; size of arguments passed by stack
 DrawFrame endp
 ;------------------------------------------------
 
@@ -218,13 +222,17 @@ DrawSymbol endp
 ; Draw message
 ; Entry: ah - color attr
 ;        ch - length
-;        ss:bp - begin of message
+;        [bp + 4] - message segment
+;        [bp + 6] - message offset
 ;        es - seg
 ;        di - position
 ; Exit: di - new position
 ; Destr: None
 ;------------------------------------------------
 DrawMessage proc
+    push bp
+    mov bp, sp
+
     push ax
     push cx
     push si
@@ -234,32 +242,42 @@ DrawMessage proc
     cmp ch, 0h
     je @@out
 
+    push ds si
+    mov ds, [bp + 4]
+    mov si, [bp + 6]
 @@again:
-    mov al, ss:[bp]
-    inc bp
+    mov al, ds:[si]
+    inc si
     mov es:[di], ax
     add di, BytesOnSymbol
     dec ch
     cmp ch, 0h
     jne @@again
+    pop si ds
 
 @@out:
     pop si
     pop cx
     pop ax
-    ret
+
+    pop bp
+    ret 4h ; size of arguments passed by stack
 DrawMessage endp
 ;------------------------------------------------
 ; Draw line with message
 ; Entry: ah - color attr
 ;        es:di - address from
 ;        si - address of symbols
-;        ss:bp - address of message
+;        [bp + 4] - message segment
+;        [bp + 6] - message offset
 ;        cl - length of line
 ; Exit: None
 ; Destr: None
 ;------------------------------------------------
 DrawMessageLine proc
+    push bp
+    mov bp, sp
+
     push cx
     push ax
     push dx
@@ -271,7 +289,11 @@ DrawMessageLine proc
     lodsb ; load byte from ds:si in al and inc si
     stosw ; mov ax in es:di and di += 2
 
+    push es di
+    mov es, [bp + 4]
+    mov di, [bp + 6]
     call GetMessageLength ; exit: ch = message length
+    pop di es
 
     push ax ; save color attr
     mov ah, 0h
@@ -284,6 +306,8 @@ DrawMessageLine proc
 
     call DrawSymbol ; exit: di = new position
 
+    push [bp + 6]
+    push [bp + 4]
     call DrawMessage
 
     sub cl, bl ; cl = length of line - number spaces before message
@@ -301,29 +325,31 @@ DrawMessageLine proc
     pop dx
     pop ax
     pop cx
-    ret
+
+    pop bp
+    ret 4h ; size of arguments passed by stack
 DrawMessageLine endp
 ;------------------------------------------------
 
 ;------------------------------------------------
 ; Count length of message (ending with '$')
-; Entry: bp - address of message
+; Entry: es:di - address of message
 ; Exit:  ch - length
 ; Destr: None
 ;------------------------------------------------
 GetMessageLength proc
-    push bp
+    push di
 
-    mov ch, 0h
+    xor ch, ch
 @@next:
-    cmp byte ptr [bp], '$'
+    cmp byte ptr es:[di], '$'
     je @@out
-    inc bp
+    inc di
     inc ch
     jmp @@next
 
 @@out:
-    pop bp
+    pop di
     ret
 GetMessageLength endp
 
