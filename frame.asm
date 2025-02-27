@@ -218,6 +218,7 @@ DrawSymbol proc
     ret
 DrawSymbol endp
 ;------------------------------------------------
+
 ;------------------------------------------------
 ; Draw message
 ; Entry: ah - color attr
@@ -353,7 +354,6 @@ GetMessageLength proc
     ret
 GetMessageLength endp
 ;------------------------------------------------
-
 
 ;------------------------------------------------
 ; Skip space
